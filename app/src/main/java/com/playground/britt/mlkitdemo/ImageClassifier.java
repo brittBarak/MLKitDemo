@@ -6,6 +6,7 @@ import android.widget.Toast;
 
 import com.google.android.gms.tasks.OnFailureListener;
 import com.google.android.gms.tasks.OnSuccessListener;
+import com.google.firebase.ml.vision.cloud.label.FirebaseVisionCloudLabel;
 import com.google.firebase.ml.vision.label.FirebaseVisionLabel;
 
 import java.util.ArrayList;
@@ -26,6 +27,7 @@ class ImageClassifier {
     private static ImageClassifier instance;
     private final Context appContext;
     private LocalClassifier localClassifier;
+    private CloudClassifier cloudClassifier;
 
     private List<String> resultLabels = new ArrayList<>();
 
@@ -43,6 +45,13 @@ class ImageClassifier {
         }
     };
 
+    private Comparator<FirebaseVisionCloudLabel> cloudLabelComparator = new Comparator<FirebaseVisionCloudLabel>() {
+        @Override
+        public int compare(FirebaseVisionCloudLabel label1, FirebaseVisionCloudLabel label2) {
+            return (int) (label1.getConfidence() - label2.getConfidence());
+        }
+    };
+
     static synchronized public ImageClassifier getInstance(Context context) {
         if (instance == null) {
             instance = new ImageClassifier(context.getApplicationContext());
@@ -53,6 +62,7 @@ class ImageClassifier {
     private ImageClassifier(Context appContext) {
         this.appContext = appContext;
         this.localClassifier = new LocalClassifier();
+        this.cloudClassifier = new CloudClassifier();
     }
 
     public void executeLocal(Bitmap bitmap, final ClassifierCallback callback) {
@@ -81,10 +91,32 @@ class ImageClassifier {
         callback.onClassified("Local Model", resultLabels, System.currentTimeMillis() - start);
     }
 
-    public void executeCloud(Bitmap selectedImage, final ClassifierCallback callback) {
-        //TODO: implement
-        Toast.makeText(appContext, "To implement...", Toast.LENGTH_LONG).show();
+    public void executeCloud(Bitmap bitmap, final ClassifierCallback callback) {
+        final long start = System.currentTimeMillis();
+
+        OnSuccessListener<List<FirebaseVisionCloudLabel>> successListener = new OnSuccessListener<List<FirebaseVisionCloudLabel>>() {
+            @Override
+            public void onSuccess(List<FirebaseVisionCloudLabel> labels) {
+                processCloudResult(labels, callback, start);
+
+            }
+        };
+
+        cloudClassifier.execute(bitmap, successListener, failureListener);
     }
+
+    private synchronized void processCloudResult(List<FirebaseVisionCloudLabel> labels, ClassifierCallback callback, long start) {
+        labels.sort(cloudLabelComparator);
+        resultLabels.clear();
+
+        FirebaseVisionCloudLabel label;
+        for (int i = 0; i < Math.min(RESULTS_TO_SHOW, labels.size()); ++i) {
+            label = labels.get(i);
+            resultLabels.add(label.getLabel() + ":" + label.getConfidence());
+        }
+        callback.onClassified("Cloud Model", resultLabels, System.currentTimeMillis() - start);
+    }
+
 
     public void executeCustom(Bitmap selectedImage, final ClassifierCallback callback) {
         //TODO: implement
