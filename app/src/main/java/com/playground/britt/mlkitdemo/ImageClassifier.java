@@ -10,6 +10,7 @@ import com.google.firebase.ml.vision.cloud.label.FirebaseVisionCloudLabel;
 import com.google.firebase.ml.vision.label.FirebaseVisionLabel;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 
@@ -28,6 +29,7 @@ class ImageClassifier {
     private final Context appContext;
     private LocalClassifier localClassifier;
     private CloudClassifier cloudClassifier;
+    private CustomClassifier customClassifier;
 
     private List<String> resultLabels = new ArrayList<>();
 
@@ -63,6 +65,7 @@ class ImageClassifier {
         this.appContext = appContext;
         this.localClassifier = new LocalClassifier();
         this.cloudClassifier = new CloudClassifier();
+        this.customClassifier = new CustomClassifier(appContext, failureListener);
     }
 
     public void executeLocal(Bitmap bitmap, final ClassifierCallback callback) {
@@ -118,9 +121,28 @@ class ImageClassifier {
     }
 
 
-    public void executeCustom(Bitmap selectedImage, final ClassifierCallback callback) {
-        //TODO: implement
-        Toast.makeText(appContext, "To implement...", Toast.LENGTH_LONG).show();
+    public void executeCustom(Bitmap bitmap, final ClassifierCallback callback) {
+        final long start = System.currentTimeMillis();
+
+        OnSuccessListener<List<LabelAndProb>> successListener = new OnSuccessListener<List<LabelAndProb>>() {
+            @Override
+            public void onSuccess(List<LabelAndProb> labels) {
+                //4.3.2 process output (for ui)
+                processCustomResult(labels, callback, start);
+            }
+        };
+        customClassifier.execute(bitmap, successListener, failureListener);
+    }
+
+    private void processCustomResult(List<LabelAndProb> resultList, ClassifierCallback callback, long start) {
+        Collections.sort(resultList);
+        resultLabels.clear();
+
+        for (int i = 0; i < Math.min(RESULTS_TO_SHOW, resultList.size()); i++) {
+            LabelAndProb label = resultList.get(i);
+            resultLabels.add(label.getLabel() + ":" + label.getProb());
+        }
+        callback.onClassified("Custom Model", resultLabels, System.currentTimeMillis() - start);
     }
 
     private void handleError(Exception e) {
